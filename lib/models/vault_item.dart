@@ -5,7 +5,7 @@ class VaultItem {
   final String imageUrl;
   final String description;
 
-  VaultItem({
+  const VaultItem({
     required this.id,
     required this.title,
     required this.category,
@@ -14,12 +14,15 @@ class VaultItem {
   });
 
   factory VaultItem.fromJson(Map<String, dynamic> json) {
+    final int photoId = json['id'] as int? ?? 0;
+
     return VaultItem(
-      id: json['id'],
-      title: json['title'] ?? 'Untitled Asset',
-      category: 'Anime & Game Edit',
-      imageUrl: json['url'] ?? 'https://via.placeholder.com/600',
-      description: json['description'] ?? 'High-definition character render or clip asset stored securely in the PExil Vault.',
+      id: photoId,
+      title: 'Photo $photoId',
+      category: 'Image Asset',
+      imageUrl: json['url'] as String? ?? '',
+      description:
+          'Image asset #$photoId retrieved from the PExil Vault image collection API.',
     );
   }
 }

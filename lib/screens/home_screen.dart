@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../models/vault_item.dart';
 import '../services/api_service.dart';
 import 'details_screen.dart';
@@ -12,10 +13,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
-  late Future<List<VaultItem>> _futureItems;
+  final TextEditingController _searchController =
+      TextEditingController();
+
   List<VaultItem> _allItems = [];
-  List<VaultItem> _filteredItems = [];
-  final TextEditingController _searchController = TextEditingController();
+  bool _isLoading = true;
+  String? _errorMessage;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -23,167 +27,372 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadData();
   }
 
-  void _loadData() {
-    _futureItems = _apiService.fetchVaultItems();
-    _futureItems.then((items) {
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final items = await _apiService.fetchVaultItems();
+
+      if (!mounted) return;
+
       setState(() {
         _allItems = items;
-        _filteredItems = items;
+        _isLoading = false;
       });
-    }).catchError((_) {});
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() {
+        _errorMessage =
+            'Unable to load image assets. Please check your internet connection and try again.';
+        _isLoading = false;
+      });
+    }
   }
 
-  void _filterSearch(String query) {
-    setState(() {
-      if (query.isEmpty) {
-        _filteredItems = _allItems;
-      } else {
-        _filteredItems = _allItems
-            .where((item) => item.title.toLowerCase().contains(query.toLowerCase()))
-            .toList();
-      }
-    });
+  List<VaultItem> get _filteredItems {
+    final query = _searchQuery.trim().toLowerCase();
+
+    if (query.isEmpty) {
+      return _allItems;
+    }
+
+    return _allItems.where((item) {
+      return item.title.toLowerCase().contains(query) ||
+          item.category.toLowerCase().contains(query);
+    }).toList();
   }
 
-  void _deleteItem(int id) {
-    showDialog(
+  Future<void> _deleteItem(VaultItem item) async {
+    final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirm Deletion'),
-        content: const Text('Are you sure you want to remove this asset from PExil Vault?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Delete Image Asset?'),
+          content: Text(
+            'Are you sure you want to remove ${item.title} '
+            'from this vault view?',
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(false);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                Navigator.of(dialogContext).pop(true);
+              },
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _allItems.removeWhere((asset) => asset.id == item.id);
+    });
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('${item.title} removed from the current vault list.'),
+          action: SnackBarAction(
+            label: 'UNDO',
             onPressed: () {
+              if (!mounted) return;
+
               setState(() {
-                _allItems.removeWhere((item) => item.id == id);
-                _filteredItems.removeWhere((item) => item.id == id);
+                _allItems.add(item);
+                _allItems.sort((a, b) => a.id.compareTo(b.id));
               });
-              Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Asset successfully deleted from vault.')),
-              );
             },
-            child: const Text('Delete'),
+          ),
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _filteredItems;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'PExil Vault',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.deepPurple,
+        foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            onPressed: _isLoading ? null : _loadData,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Reload image assets',
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+              },
+              decoration: InputDecoration(
+                labelText: 'Search image assets',
+                hintText: 'Try Photo 1 or Image Asset',
+                prefixIcon: const Icon(
+                  Icons.search,
+                  color: Colors.deepPurple,
+                ),
+                suffixIcon: _searchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _searchQuery = '';
+                          });
+                        },
+                      ),
+                filled: true,
+                fillColor: Colors.deepPurple.shade50,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: _buildContent(items),
           ),
         ],
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('PExil Vault'),
-        backgroundColor: Colors.deepPurple,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadData,
-            tooltip: 'Reload Vault',
-          )
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _filterSearch,
-              decoration: InputDecoration(
-                labelText: 'Search Vault Assets',
-                prefixIcon: const Icon(Icons.search, color: Colors.deepPurple),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                filled: true,
-                fillColor: Colors.deepPurple.shade50,
-              ),
+  Widget _buildContent(List<VaultItem> items) {
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(
+              color: Colors.deepPurple,
             ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<VaultItem>>(
-              future: _futureItems,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
-                }
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.error_outline, size: 64, color: Colors.red),
-                          const SizedBox(height: 12),
-                          Text('Failed to load assets: ${snapshot.error}', textAlign: TextAlign.center),
-                          const SizedBox(height: 16),
-                          ElevatedButton(onPressed: _loadData, child: const Text('Retry Connection'))
-                        ],
-                      ),
-                    ),
-                  );
-                }
-                if (_filteredItems.isEmpty) {
-                  return const Center(
-                    child: Text('No vault assets found.', style: TextStyle(fontSize: 16, color: Colors.grey)),
-                  );
-                }
+            SizedBox(height: 16),
+            Text('Loading your image vault...'),
+          ],
+        ),
+      );
+    }
 
-                return ListView.builder(
-                  itemCount: _filteredItems.length,
-                  itemBuilder: (context, index) {
-                    final item = _filteredItems[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      elevation: 3,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      child: ListTile(
-                        leading: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            item.imageUrl,
-                            width: 56,
-                            height: 56,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.image, size: 56),
-                          ),
-                        ),
-                        title: Text(
-                          item.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text(item.category, style: TextStyle(color: Colors.grey[600])),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          onPressed: () => _deleteItem(item.id),
-                          tooltip: 'Delete Asset',
-                        ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => DetailsScreen(item: item),
+    if (_errorMessage != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.cloud_off,
+                size: 64,
+                color: Colors.redAccent,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage!,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _loadData,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Try Again'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (items.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.photo_library_outlined,
+                size: 64,
+                color: Colors.grey,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _searchQuery.isEmpty
+                    ? 'Your image vault is empty.'
+                    : 'No images match "$_searchQuery".',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 16),
+              ),
+              if (_searchQuery.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() {
+                      _searchQuery = '';
+                    });
+                  },
+                  child: const Text('Clear Search'),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.photo_library_outlined,
+                color: Colors.deepPurple,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Your Image Collection',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+              ),
+              Text(
+                '${items.length} ${items.length == 1 ? 'item' : 'items'}',
+                style: TextStyle(color: Colors.grey.shade700),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.only(bottom: 16),
+            itemCount: items.length,
+            itemBuilder: (context, index) {
+              final item = items[index];
+
+              return Card(
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                elevation: 2,
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(10),
+                  leading: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      width: 64,
+                      height: 64,
+                      child: item.imageUrl.isEmpty
+                          ? const Icon(
+                              Icons.broken_image_outlined,
+                              size: 40,
+                            )
+                          : Image.network(
+                              item.imageUrl,
+                              fit: BoxFit.cover,
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                if (loadingProgress == null) {
+                                  return child;
+                                }
+
+                                return const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(
+                                  Icons.broken_image_outlined,
+                                  size: 40,
+                                  color: Colors.grey,
+                                );
+                              },
                             ),
-                          );
-                        },
+                    ),
+                  ),
+                  title: Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(item.category),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.redAccent,
+                    ),
+                    tooltip: 'Delete ${item.title}',
+                    onPressed: () => _deleteItem(item),
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (context) => DetailsScreen(item: item),
                       ),
                     );
                   },
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
