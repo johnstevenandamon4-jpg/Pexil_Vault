@@ -1,7 +1,11 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../models/vault_item.dart';
 import '../services/api_service.dart';
+import '../services/local_asset_storage.dart';
 import 'details_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -13,11 +17,15 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
+  final LocalAssetStorage _storage = LocalAssetStorage();
   final TextEditingController _searchController =
       TextEditingController();
 
   List<VaultItem> _allItems = [];
+  List<VaultItem> _localItems = [];
+
   bool _isLoading = true;
+  bool _isAddingPhoto = false;
   String? _errorMessage;
   String _searchQuery = '';
 
@@ -26,6 +34,14 @@ class _HomeScreenState extends State<HomeScreen> {
   static const Color _accent = Color(0xFFB49AFF);
   static const Color _textPrimary = Color(0xFFF5F0FF);
   static const Color _textSecondary = Color(0xFFB7ADC9);
+
+  static const List<String> _categories = [
+    'Anime',
+    'Gacha',
+    'Manhwa',
+    'Background',
+    'Other',
+  ];
 
   @override
   void initState() {
@@ -45,21 +61,40 @@ class _HomeScreenState extends State<HomeScreen> {
       _errorMessage = null;
     });
 
+    List<VaultItem> savedItems;
+
     try {
-      final items = await _apiService.fetchVaultItems();
+      savedItems = await _storage.getAll();
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+        _errorMessage =
+            'Could not read saved photos from browser storage.';
+      });
+      return;
+    }
+
+    try {
+      final apiItems = await _apiService.fetchVaultItems();
 
       if (!mounted) return;
 
       setState(() {
-        _allItems = items;
+        _localItems = savedItems;
+        _allItems = [...savedItems, ...apiItems];
         _isLoading = false;
       });
     } catch (_) {
       if (!mounted) return;
 
       setState(() {
-        _errorMessage =
-            'Unable to load image assets. Check your internet connection and try again.';
+        _localItems = savedItems;
+        _allItems = savedItems;
+        _errorMessage = savedItems.isEmpty
+            ? 'Unable to load sample photos. Check your internet connection and try again.'
+            : null;
         _isLoading = false;
       });
     }
@@ -74,6 +109,201 @@ class _HomeScreenState extends State<HomeScreen> {
       return item.title.toLowerCase().contains(query) ||
           item.category.toLowerCase().contains(query);
     }).toList();
+  }
+
+  Future<void> _pickAndAddPhoto() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty || !mounted) {
+        return;
+      }
+
+      final file = result.files.single;
+      final Uint8List? bytes = file.bytes;
+
+      if (bytes == null || bytes.isEmpty) {
+        _showMessage('Could not read that image. Please try another file.');
+        return;
+      }
+
+      final originalName = file.name;
+      final dotIndex = originalName.lastIndexOf('.');
+      final suggestedName = dotIndex > 0
+          ? originalName.substring(0, dotIndex)
+          : originalName;
+
+      final nameController = TextEditingController(
+        text: suggestedName,
+      );
+
+      String selectedCategory = 'Other';
+
+      final formResult = await showDialog<Map<String, String>>(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                backgroundColor: _surface,
+                title: const Text(
+                  'Add to PExil Vault',
+                  style: TextStyle(color: _textPrimary),
+                ),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.memory(
+                          bytes,
+                          height: 150,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        file.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: _textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: nameController,
+                        autofocus: true,
+                        style: const TextStyle(color: _textPrimary),
+                        decoration: InputDecoration(
+                          labelText: 'Photo name',
+                          labelStyle: const TextStyle(
+                            color: _textSecondary,
+                          ),
+                          filled: true,
+                          fillColor: _background,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        value: selectedCategory,
+                        dropdownColor: _surface,
+                        style: const TextStyle(color: _textPrimary),
+                        decoration: InputDecoration(
+                          labelText: 'Category',
+                          labelStyle: const TextStyle(
+                            color: _textSecondary,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        items: _categories.map((category) {
+                          return DropdownMenuItem<String>(
+                            value: category,
+                            child: Text(category),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            setDialogState(() {
+                              selectedCategory = value;
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () =>
+                        Navigator.of(dialogContext).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () {
+                      final name = nameController.text.trim();
+
+                      if (name.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Please enter a photo name.'),
+                          ),
+                        );
+                        return;
+                      }
+
+                      Navigator.of(dialogContext).pop({
+                        'title': name,
+                        'category': selectedCategory,
+                      });
+                    },
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('Save photo'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+
+      nameController.dispose();
+
+      if (formResult == null || !mounted) return;
+
+      setState(() => _isAddingPhoto = true);
+
+      final newItem = VaultItem(
+        id: -DateTime.now().microsecondsSinceEpoch,
+        title: formResult['title']!,
+        category: formResult['category']!,
+        imageUrl: '',
+        description:
+            'A photo added from your device to your PExil Vault collection.',
+        imageBytes: bytes,
+        isLocal: true,
+      );
+
+      try {
+        await _storage.save(newItem);
+
+        if (!mounted) return;
+
+        setState(() {
+          _localItems.insert(0, newItem);
+          _allItems.insert(0, newItem);
+          _isAddingPhoto = false;
+        });
+
+        _showMessage('${newItem.title} saved to this browser.');
+      } catch (_) {
+        if (!mounted) return;
+
+        setState(() => _isAddingPhoto = false);
+
+        _showMessage(
+          'The photo could not be saved. Chrome storage may be full or unavailable.',
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+
+      setState(() => _isAddingPhoto = false);
+      _showMessage('Unable to add this photo. Please try again.');
+    }
   }
 
   Future<void> _deleteItem(VaultItem item) async {
@@ -110,8 +340,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (confirmed != true || !mounted) return;
 
+    if (item.isLocal) {
+      try {
+        await _storage.delete(item.id);
+      } catch (_) {
+        _showMessage('Could not remove the saved photo.');
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
     setState(() {
       _allItems.removeWhere((asset) => asset.id == item.id);
+      _localItems.removeWhere((asset) => asset.id == item.id);
     });
 
     ScaffoldMessenger.of(context)
@@ -122,20 +364,42 @@ class _HomeScreenState extends State<HomeScreen> {
           action: SnackBarAction(
             label: 'UNDO',
             textColor: _accent,
-            onPressed: () {
+            onPressed: () async {
+              if (item.isLocal) {
+                try {
+                  await _storage.save(item);
+                } catch (_) {
+                  _showMessage('Could not restore the saved photo.');
+                  return;
+                }
+              }
+
               if (!mounted) return;
 
               setState(() {
                 if (!_allItems.any((asset) => asset.id == item.id)) {
                   _allItems.add(item);
-                  _allItems.sort(
-                    (a, b) => a.id.compareTo(b.id),
-                  );
+                  _allItems.sort((a, b) => a.id.compareTo(b.id));
+                }
+
+                if (item.isLocal &&
+                    !_localItems.any((asset) => asset.id == item.id)) {
+                  _localItems.add(item);
                 }
               });
             },
           ),
         ),
+      );
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
       );
   }
 
@@ -185,7 +449,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'YOUR CREATIVE SPACE',
                     style: TextStyle(
                       color: _accent,
@@ -217,9 +481,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     onChanged: (value) {
                       setState(() => _searchQuery = value);
                     },
-                    style: const TextStyle(
-                      color: _textPrimary,
-                    ),
+                    style: const TextStyle(color: _textPrimary),
                     decoration: InputDecoration(
                       hintText: 'Search your collection...',
                       hintStyle: const TextStyle(
@@ -270,16 +532,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-              child: Row(
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  const Expanded(
-                    child: Text(
-                      'Image collection',
-                      style: TextStyle(
-                        color: _textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                  const Text(
+                    'Image collection',
+                    style: TextStyle(
+                      color: _textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                   Container(
@@ -305,12 +568,32 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
+                  FilledButton.icon(
+                    onPressed: _isAddingPhoto ? null : _pickAndAddPhoto,
+                    icon: _isAddingPhoto
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.add_photo_alternate_outlined,
+                          ),
+                    label: Text(
+                      _isAddingPhoto ? 'Saving...' : 'Add Photo',
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _accent,
+                      foregroundColor: _background,
+                    ),
+                  ),
                 ],
               ),
             ),
-            Expanded(
-              child: _buildContent(items),
-            ),
+            Expanded(child: _buildContent(items)),
           ],
         ),
       ),
@@ -334,7 +617,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    if (_errorMessage != null) {
+    if (_errorMessage != null && items.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -389,7 +672,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Try searching with another title or category.',
+                'Add a photo or try another search.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: _textSecondary),
               ),
@@ -410,7 +693,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-
         final columns = width >= 1000
             ? 5
             : width >= 750
@@ -488,45 +770,33 @@ class _AssetCard extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  item.imageUrl.isEmpty
-                      ? const ColoredBox(
-                          color: Color(0xFF29223D),
-                          child: Icon(
-                            Icons.broken_image_outlined,
-                            color: _accent,
-                            size: 42,
-                          ),
-                        )
-                      : Image.network(
-                          item.imageUrl,
-                          fit: BoxFit.cover,
-                          loadingBuilder:
-                              (context, child, progress) {
-                            if (progress == null) return child;
+                  if (item.imageBytes != null)
+                    Image.memory(
+                      item.imageBytes!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                    )
+                  else if (item.imageUrl.isNotEmpty)
+                    Image.network(
+                      item.imageUrl,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
 
-                            return const ColoredBox(
-                              color: Color(0xFF29223D),
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: _accent,
-                                ),
-                              ),
-                            );
-                          },
-                          errorBuilder: (_, __, ___) {
-                            return const ColoredBox(
-                              color: Color(0xFF29223D),
-                              child: Center(
-                                child: Icon(
-                                  Icons.broken_image_outlined,
-                                  color: _accent,
-                                  size: 42,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+                        return const ColoredBox(
+                          color: Color(0xFF29223D),
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: _accent,
+                            ),
+                          ),
+                        );
+                      },
+                      errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                    )
+                  else
+                    _imagePlaceholder(),
                   Positioned(
                     top: 8,
                     right: 8,
@@ -613,6 +883,19 @@ class _AssetCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _imagePlaceholder() {
+    return const ColoredBox(
+      color: Color(0xFF29223D),
+      child: Center(
+        child: Icon(
+          Icons.broken_image_outlined,
+          color: _accent,
+          size: 42,
         ),
       ),
     );
