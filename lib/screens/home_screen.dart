@@ -18,8 +18,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
   final LocalAssetStorage _storage = LocalAssetStorage();
-  final TextEditingController _searchController =
-      TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   List<VaultItem> _allItems = [];
   List<VaultItem> _localItems = [];
@@ -127,7 +126,9 @@ class _HomeScreenState extends State<HomeScreen> {
       final Uint8List? bytes = file.bytes;
 
       if (bytes == null || bytes.isEmpty) {
-        _showMessage('Could not read that image. Please try another file.');
+        _showMessage(
+          'Could not read that image. Please try another file.',
+        );
         return;
       }
 
@@ -154,82 +155,90 @@ class _HomeScreenState extends State<HomeScreen> {
                   'Add to PExil Vault',
                   style: TextStyle(color: _textPrimary),
                 ),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.memory(
-                          bytes,
-                          height: 150,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
+                content: SizedBox(
+                  width: 320,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.memory(
+                            bytes,
+                            height: 150,
+                            width: 320,
+                            fit: BoxFit.cover,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        file.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _textSecondary,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: nameController,
-                        autofocus: true,
-                        style: const TextStyle(color: _textPrimary),
-                        decoration: InputDecoration(
-                          labelText: 'Photo name',
-                          labelStyle: const TextStyle(
+                        const SizedBox(height: 16),
+                        Text(
+                          file.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
                             color: _textSecondary,
-                          ),
-                          filled: true,
-                          fillColor: _background,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            fontSize: 12,
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      DropdownButtonFormField<String>(
-                        value: selectedCategory,
-                        dropdownColor: _surface,
-                        style: const TextStyle(color: _textPrimary),
-                        decoration: InputDecoration(
-                          labelText: 'Category',
-                          labelStyle: const TextStyle(
-                            color: _textSecondary,
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: nameController,
+                          autofocus: true,
+                          style: const TextStyle(
+                            color: _textPrimary,
                           ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
+                          decoration: InputDecoration(
+                            labelText: 'Photo name',
+                            labelStyle: const TextStyle(
+                              color: _textSecondary,
+                            ),
+                            filled: true,
+                            fillColor: _background,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
-                        items: _categories.map((category) {
-                          return DropdownMenuItem<String>(
-                            value: category,
-                            child: Text(category),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setDialogState(() {
-                              selectedCategory = value;
-                            });
-                          }
-                        },
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          initialValue: selectedCategory,
+                          dropdownColor: _surface,
+                          style: const TextStyle(
+                            color: _textPrimary,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: 'Category',
+                            labelStyle: const TextStyle(
+                              color: _textSecondary,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          items: _categories.map((category) {
+                            return DropdownMenuItem<String>(
+                              value: category,
+                              child: Text(category),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setDialogState(() {
+                                selectedCategory = value;
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () =>
-                        Navigator.of(dialogContext).pop(),
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                    },
                     child: const Text('Cancel'),
                   ),
                   FilledButton.icon(
@@ -239,7 +248,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       if (name.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Please enter a photo name.'),
+                            content: Text(
+                              'Please enter a photo name.',
+                            ),
                           ),
                         );
                         return;
@@ -321,8 +332,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(false),
+            onPressed: () {
+              Navigator.of(dialogContext).pop(false);
+            },
             child: const Text('Cancel'),
           ),
           FilledButton(
@@ -330,8 +342,9 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: Colors.redAccent,
               foregroundColor: Colors.white,
             ),
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(true),
+            onPressed: () {
+              Navigator.of(dialogContext).pop(true);
+            },
             child: const Text('Remove'),
           ),
         ],
@@ -340,11 +353,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (confirmed != true || !mounted) return;
 
+    // Save the original positions for the Undo operation.
+    final itemIndex = _allItems.indexWhere(
+      (asset) => asset.id == item.id,
+    );
+
+    final localIndex = _localItems.indexWhere(
+      (asset) => asset.id == item.id,
+    );
+
+    // Delete local photos from browser storage.
     if (item.isLocal) {
       try {
         await _storage.delete(item.id);
       } catch (_) {
-        _showMessage('Could not remove the saved photo.');
+        if (mounted) {
+          _showMessage('Could not remove the saved photo.');
+        }
         return;
       }
     }
@@ -356,20 +381,30 @@ class _HomeScreenState extends State<HomeScreen> {
       _localItems.removeWhere((asset) => asset.id == item.id);
     });
 
+    // Show the Undo notification for eight seconds.
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('${item.title} removed from this list.'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 8),
+          content: Text(
+            '${item.title} removed from your collection.',
+          ),
           action: SnackBarAction(
             label: 'UNDO',
             textColor: _accent,
             onPressed: () async {
+              // Restore the photo in browser storage first.
               if (item.isLocal) {
                 try {
                   await _storage.save(item);
                 } catch (_) {
-                  _showMessage('Could not restore the saved photo.');
+                  if (mounted) {
+                    _showMessage(
+                      'Could not restore the saved photo.',
+                    );
+                  }
                   return;
                 }
               }
@@ -377,16 +412,34 @@ class _HomeScreenState extends State<HomeScreen> {
               if (!mounted) return;
 
               setState(() {
-                if (!_allItems.any((asset) => asset.id == item.id)) {
-                  _allItems.add(item);
-                  _allItems.sort((a, b) => a.id.compareTo(b.id));
+                // Restore the photo to its original position.
+                if (!_allItems.any(
+                  (asset) => asset.id == item.id,
+                )) {
+                  final restoreIndex = itemIndex < 0
+                      ? _allItems.length
+                      : itemIndex.clamp(0, _allItems.length).toInt();
+
+                  _allItems.insert(restoreIndex, item);
                 }
 
                 if (item.isLocal &&
-                    !_localItems.any((asset) => asset.id == item.id)) {
-                  _localItems.add(item);
+                    !_localItems.any(
+                      (asset) => asset.id == item.id,
+                    )) {
+                  final restoreLocalIndex = localIndex < 0
+                      ? _localItems.length
+                      : localIndex
+                          .clamp(0, _localItems.length)
+                          .toInt();
+
+                  _localItems.insert(restoreLocalIndex, item);
                 }
               });
+
+              _showMessage(
+                '${item.title} restored successfully.',
+              );
             },
           ),
         ),
@@ -774,7 +827,7 @@ class _AssetCard extends StatelessWidget {
                     Image.memory(
                       item.imageBytes!,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                      errorBuilder: (_, _, _) => _imagePlaceholder(),
                     )
                   else if (item.imageUrl.isNotEmpty)
                     Image.network(
@@ -793,7 +846,7 @@ class _AssetCard extends StatelessWidget {
                           ),
                         );
                       },
-                      errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                      errorBuilder: (_, _, _) => _imagePlaceholder(),
                     )
                   else
                     _imagePlaceholder(),

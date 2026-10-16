@@ -12,24 +12,32 @@ class LocalAssetStorage {
   static const String _storeName = 'assets';
   static const String _legacyStorageKey = 'pexil_vault_local_assets';
 
-  Future<Database> _openDatabase() {
-    final factory = getIdbFactory();
+  
+Future<Database> _openDatabase() {
+  final factory = getIdbFactory();
 
-    return factory.open(
-      _databaseName,
-      version: 1,
-      onUpgradeNeeded: (event) {
-        final database = event.database;
-
-        if (!database.objectStoreNames.contains(_storeName)) {
-          database.createObjectStore(
-            _storeName,
-            keyPath: 'id',
-          );
-        }
-      },
+  if (factory == null) {
+    throw UnsupportedError(
+      'Local browser storage is unavailable on this platform.',
     );
   }
+
+  return factory.open(
+    _databaseName,
+    version: 1,
+    onUpgradeNeeded: (event) {
+      final database = event.database;
+
+      if (!database.objectStoreNames.contains(_storeName)) {
+        database.createObjectStore(
+          _storeName,
+          keyPath: 'id',
+        );
+      }
+    },
+  );
+}
+
 
   Future<List<VaultItem>> getAll() async {
     final database = await _openDatabase();
